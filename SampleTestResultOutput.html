@@ -1,0 +1,1727 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <title>TestApplication.UiTests Test Execution Report</title>
+    <script type="text/javascript" src="http://code.jquery.com/jquery-1.6.2.min.js"></script>
+    <script type="text/javascript">
+            /**
+            * jQuery.fn.sortElements
+            * --------------
+            * #author James Padolsey (http://james.padolsey.com)
+            * #version 0.11
+            * #updated 18-MAR-2010
+            * #url https://raw.github.com/jamespadolsey/jQuery-Plugins/master/sortElements/jquery.sortElements.js
+            * --------------
+            * #param Function comparator:
+            *   Exactly the same behaviour as [1,2,3].sort(comparator)
+            *
+            * #param Function getSortable
+            *   A function that should return the element that is
+            *   to be sorted. The comparator will run on the
+            *   current collection, but you may want the actual
+            *   resulting sort to occur on a parent or another
+            *   associated element.
+            *
+            *   E.g. $('td').sortElements(comparator, function(){
+            *      return this.parentNode;
+            *   })
+            *
+            *   The <td>'s parent (<tr>) will be sorted instead
+            *   of the <td> itself.
+            */
+            jQuery.fn.sortElements = (function () {
+
+                var sort = [].sort;
+
+                return function (comparator, getSortable) {
+
+                    getSortable = getSortable || function () { return this; };
+
+                    var placements = this.map(function () {
+
+                        var sortElement = getSortable.call(this),
+                parentNode = sortElement.parentNode,
+
+                        // Since the element itself will change position, we have
+                        // to have some way of storing it's original position in
+                        // the DOM. The easiest way is to have a 'flag' node:
+                nextSibling = parentNode.insertBefore(
+                    document.createTextNode(''),
+                    sortElement.nextSibling
+                );
+
+                        return function () {
+
+                            if (parentNode === this) {
+                                throw new Error(
+                        "You can't sort elements if any one is a descendant of another."
+                    );
+                            }
+
+                            // Insert before flag:
+                            parentNode.insertBefore(this, nextSibling);
+                            // Remove flag:
+                            parentNode.removeChild(nextSibling);
+
+                        };
+
+                    });
+
+                    return sort.call(this, comparator).each(function (i) {
+                        placements[i].call(getSortable.call(this));
+                    });
+
+                };
+
+            })();
+    </script>
+    <script type="text/javascript">
+            jQuery.fn.setBarSizes = (function () {
+                return function (metricName, maxBarSize, min) {
+                    var max = Math.max.apply(Math, $.makeArray($(this).map(function () { return Number($(this).attr('data-sr-' + metricName)); })));
+                    var scale = 1.0;
+                    while (max > 0.0 && max <= 10.0) {
+                        scale = scale * 10.0;
+                        max = max * 10.0;
+                    }
+                    max = (Math.ceil(max / 2) * 2) / scale;
+
+                    this.each(function () {
+                        var barAnchor = $(this).find('a');
+                        var actual = $(this).attr('data-sr-' + metricName);
+                        var newHeight = Math.max(Math.round(maxBarSize * (actual - min) / (max - min)), 2);
+                        barAnchor.css({ height: newHeight });
+                    });
+
+                    var unit = "";
+                    if (metricName.substr(metricName.length - 4, 4) === "time")
+                        unit = "s";
+
+                    $('#testview .scale-min-label').each(function () {
+                        $(this).text(min.toString() + unit);
+                    });
+                    $('#testview .scale-max-label').each(function () {
+                        $(this).text(max.toString() + unit);
+                    });
+                    var mid = max / 2;
+                    $('#testview .scale-mid-label').each(function () {
+                        $(this).text(mid.toString() + unit);
+                    });
+                };
+            })();
+
+            function getComparer(metricName, isDesc) {
+                return function (a, b) {
+                    var aNumber = Number($(a).attr('data-sr-' + metricName));
+                    var bNumber = Number($(b).attr('data-sr-' + metricName));
+                    var result = aNumber > bNumber ? 1 : (aNumber < bNumber ? -1 : 0);
+                    if (isDesc)
+                        result = -1 * result;
+
+                    if (result == 0 && metricName != "order")
+                        result = getComparer("order", false)(a, b);
+
+                    return result;
+                };
+            }
+
+            var currentSort = "";
+            function doSort(allowToggleDesc) {
+                var newSort = $("input[name='barSortOrder']:checked").val();
+                if (allowToggleDesc && currentSort == newSort) {
+                    $('#barSortDesc').click();
+                    doSort(false);
+                    return;
+                }
+                currentSort = newSort;
+                $('#testview td.testview-item').sortElements(getComparer(newSort, $('#barSortDesc').is(':checked')));
+            }
+
+
+            function doSetHeights(allowSort) {
+                var selectedMetric = $("input[name='barHeight']:checked").val();
+                $('#testview td.testview-item').setBarSizes(selectedMetric, 60, 0.0);
+
+                if (allowSort && currentSort != selectedMetric) {
+                    var $radios = $("input[name='barSortOrder']");
+                    $radios.filter('[value=' + selectedMetric + ']').attr('checked', true);
+                    $("#barSortDesc").attr("checked", [true]);
+                    doSort(false);
+                }
+            }
+
+            $(document).ready(function () {
+                $("input[name='barSortOrder']").click(function () { doSort(true); return true; });
+                $("input[name='barSortDesc']").change(function () { doSort(false); });
+                $("input[name='barHeight']").change(function () { doSetHeights(true); });
+
+                doSort(false);
+                doSetHeights(false);
+
+                $("div.scrollable").css({ 'overflow': 'auto' });
+            });
+    </script>
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/numeric/1.2.6/numeric.min.js"></script>
+    <script>
+            var showButtonText = "show";
+            var hideButtonText = "hide";
+
+            function toggle1(sdid, event) {
+                var link;
+                if (window.event) {
+                    link = window.event.srcElement;
+                } else {
+                    link = event.target;
+                }
+
+                toToggle = document.getElementById(sdid);
+                if (link.innerHTML == showButtonText) {
+                    link.innerHTML = hideButtonText;
+                    toToggle.style.display = "table-row";
+                }
+                else {
+                    link.innerHTML = showButtonText;
+                    toToggle.style.display = "none";
+                }
+            }
+    </script>
+    <style type="text/css">
+        body {
+            color: #000000;
+            font-family: Arial,Liberation Sans,DejaVu Sans,sans-serif;
+            line-height: 130%;
+        }
+
+        h1 {
+            font-family: Trebuchet MS,Liberation Sans,DejaVu Sans,sans-serif;
+            font-size: 170%;
+            font-weight: bold;
+        }
+        h12 {
+            font-family: Trebuchet MS,Liberation Sans,DejaVu Sans,sans-serif;
+            font-size: 170%;
+            font-weight: bold;
+            color:white;
+        }
+        h2 {
+            font-family: Trebuchet MS,Liberation Sans,DejaVu Sans,sans-serif;
+            font-size: 130%;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        h3 {
+            font-family: Trebuchet MS,Liberation Sans,DejaVu Sans,sans-serif;
+            font-size: 120%;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        a.bar {
+            text-decoration: none;
+            display: block;
+            line-height: 1px;
+        }
+
+        .description {
+            font-style: italic;
+        }
+
+        .log {
+            width: 600px;
+            white-space: pre-wrap;
+            display: block;
+            margin: 0px;
+        }
+
+        .errorMessage {
+            width: 600px;
+            color: Red;
+            font-weight: bold;
+        }
+
+        .stackTrace {
+            width: 600px;
+            white-space: pre-wrap;
+            font-style: italic;
+            color: Red;
+            display: block;
+        }
+
+        table.testEvents {
+            border: solid 1px #e8eef4;
+            border-collapse: collapse;
+        }
+
+            table.testEvents td {
+                vertical-align: top;
+                padding: 5px;
+                border: solid 1px #e8eef4;
+            }
+
+            table.testEvents th {
+                padding: 6px 5px;
+                text-align: left;
+                background-color: #e8eef4;
+                border: solid 1px #e8eef4;
+            }
+
+        .comment {
+            font-style: italic;
+            font-size: smaller;
+        }
+
+        .startupBar {
+            background-color: #EEEEEE;
+            cursor: default;
+        }
+
+        .colorSucceeded {
+            background-color: #90ED7B;
+        }
+
+        .colorIgnored {
+            background-color: #FFFF85;
+        }
+
+        .colorPending {
+            background-color: #D47BED;
+        }
+
+        .colorNothingToRun {
+            background-color: #CCCCFF;
+        }
+
+        .colorSkipped {
+            background-color: #CCCCFF;
+        }
+
+        .colorInconclusive {
+            background-color: #7BEDED;
+        }
+
+        .colorCleanupFailed {
+            background-color: #FFCCCC;
+        }
+
+        .colorRandomlyFailed {
+            background-color: #EDB07B;
+        }
+
+        .colorFailed {
+            background-color: #ED5F5F;
+        }
+
+        .colorInitializationFailed {
+            background-color: #FF0000;
+        }
+
+        .colorFrameworkError {
+            background-color: #FF0000;
+        }
+
+        ul.subNodeLinks {
+            padding-left: 20px;
+            margin: 0px;
+        }
+
+            ul.subNodeLinks li {
+                list-style: none;
+            }
+
+        /* views general */
+        div.scrollable {
+            /*overflow: auto; - thsi has to be set from js, because of an IE9 bug */
+        }
+
+        div.viewbox {
+            position: relative;
+            border: 3px solid #e8eef4;
+        }
+
+            div.viewbox table {
+                border: 0px;
+            }
+
+        /* testview */
+        #testview {
+            padding-top: 23px;
+        }
+
+        table.testview-items td {
+            vertical-align: bottom;
+            padding: 0px 1px 0px 1px;
+        }
+
+        td.right-padding, td.left-padding {
+            width: 25px;
+            min-width: 25px;
+        }
+
+        table.testview-items a.bar {
+            width: 5px;
+        }
+
+        table.testview-items tr.testview-items-row {
+            height: 60px;
+        }
+
+        /* scale */
+        table.vertical-scale {
+            position: absolute;
+            top: 23px;
+            left: 0px;
+            width: 100%;
+            z-index: -100;
+        }
+
+            table.vertical-scale td, tr.horizontal-scale td {
+                font-size: 60%;
+                line-height: normal;
+            }
+
+            table.vertical-scale tr.scale-max, table.vertical-scale tr.scale-mid {
+                height: 30px;
+            }
+
+            tr.horizontal-scale, table.vertical-scale tr.scale-min {
+                height: 12px;
+            }
+
+        td.scale-max-label, td.scale-mid-label, td.scale-min-label {
+            border-top: solid 1px #E6E6E6;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        td.scale-10-label {
+            border-left: solid 1px #E6E6E6;
+            text-align: left;
+            vertical-align: bottom;
+            padding-left: 1px;
+        }
+
+        tr.scale-mid td, tr.scale-min td, tr.scale-max td {
+            border-top: solid 1px #E6E6E6;
+        }
+
+
+        /* bar-control */
+        #bar-control {
+            font-size: 60%;
+            line-height: normal;
+            position: absolute;
+            right: 0px;
+            top: 0px;
+        }
+
+            #bar-control label {
+                font-weight: bold;
+                vertical-align: middle;
+            }
+
+            #bar-control .option {
+                vertical-align: middle;
+                text-transform: lowercase;
+            }
+
+            #bar-control input[type="checkbox"] {
+                padding: 0 2px 0 3px;
+            }
+
+            #bar-control input {
+                vertical-align: top;
+                height: 12px;
+                margin: 0px;
+                padding: 0px;
+            }
+
+            #bar-control div {
+                float: right;
+                margin: 3px 5px 3px 5px;
+            }
+
+
+        /* timeline view */
+        #timelineview {
+            padding-top: 5px;
+        }
+
+        table.timelineview a {
+            height: 20px;
+        }
+
+        table.timelineview td {
+            vertical-align: bottom;
+            padding: 0px 1px 0px 0px;
+            border: 0px;
+        }
+
+        tr.thread-items-row {
+            height: 25px;
+        }
+
+            tr.thread-items-row td {
+                vertical-align: bottom;
+            }
+
+        td.thread-label {
+            padding: 0px 6px 0px 6px;
+            text-align: right;
+            line-height: 18px;
+            vertical-align: bottom;
+        }
+
+        th.thread-label {
+            padding: 3px 6px 0px 6px;
+            line-height: 18px;
+            text-align: left;
+            vertical-align: bottom;
+        }
+        /*just added*/
+        .StatusBar {
+            width: 100%;
+            height: 40px;
+            background-color: #34495E;
+        }
+        .statusBarInner {
+            position: relative;
+            background-color: #34495E;
+            width: 100%;
+            height: 70%;
+            margin-left: auto;
+            margin-right: auto;
+            margin-top: auto;
+            margin-bottom: auto;
+            top: 15%;
+        }
+        .font {
+            color: grey;
+            font-size: 80%;
+        }
+       /*Tab*/
+        * {
+            box-sizing: border-box
+        }
+
+        body {
+            font-family: "Lato", sans-serif;
+        }
+
+        /* Style the tab */
+        div.tab {
+            float: left;
+            border: 1px solid #ccc;
+            background-color: #f1f1f1;
+            width: 15%;
+            height: 1200px;
+        }
+
+            /* Style the buttons inside the tab */
+            div.tab button {
+                display: block;
+                background-color: inherit;
+                color: black;
+                padding: 22px 16px;
+                width: 100%;
+                border: none;
+                outline: none;
+                text-align: left;
+                cursor: pointer;
+                transition: 0.3s;
+                font-size: 17px;
+            }
+
+                /* Change background color of buttons on hover */
+                div.tab button:hover {
+                    background-color: #ddd;
+                }
+
+                /* Create an active/current "tab button" class */
+                div.tab button.active {
+                    background-color: #ccc;
+                }
+
+        /* Style the tab content */
+        .tabcontent {
+            float: left;
+            padding: 0px 12px;
+            border: 1px solid #ccc;
+            width: 85%;
+            border-left: none;
+            height: 1200px;
+        }
+        /*Show Hide*/
+        #myDIV {
+            width: 100%;
+            padding: 50px 0;
+            text-align: center;
+            background-color: grey;
+            margin-top: 20px;
+            color: white;
+        }
+    </style>
+    <link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/2.3.2/css/bootstrap.css" type="text/css" />
+    <link rel="stylesheet" href="http://prismjs.com/themes/prism-okaidia.css" data-noprefix="" />
+</head>
+<body>
+    <div class="StatusBar">
+        <div class="statusBarInner">
+            <center><h12>Test Execution Report</h12></center>
+        </div>
+    </div>
+    <ul style="list-style-type:none">
+        <li>Project: TestApplication.UiTests</li>
+        <li class="font">Start Time: 6/4/2019 11:13:44 PM</li>
+        <li class="font">Duration: 00:00:00.9117166</li>
+        <li class="font">Test Threads: 1</li>
+    </ul>
+
+    <div class="tab">
+        <button class="tablinks" onclick="openTab(event, 'Dashboard')" id="defaultOpen">Dashboard</button>
+        <button class="tablinks" onclick="openTab(event, 'Summary')">Summary</button>
+        <button class="tablinks" onclick="openTab(event, 'ErrDetails')">Error Details</button>
+        <button class="tablinks" onclick="openTab(event, 'ScenSummary')">Scenario Summary</button>
+        <button class="tablinks" onclick="openTab(event, 'ScenDetails')">Scenario Details</button>
+        <button class="tablinks" onclick="openTab(event, 'TimeLine')">Time Line</button>
+    </div>
+
+    <div id="Dashboard" class="tabcontent">
+        <center><h2>Execution Summary</h2></center>
+        
+        <div id="myDiv"><!-- Plotly chart will be drawn inside this DIV --></div>
+        <script>
+        var data = [{
+            values: [0, 3, 0],
+            labels: ['Sucess', 'Fail', 'Pending'],
+            marker: { colors: ['rgb(25, 181, 69)', 'rgb(229, 25, 25)', 'rgb(252, 198, 5)'] },
+            type: 'pie'
+        }];
+
+        Plotly.newPlot('myDiv', data);
+        </script>
+        
+        <h2>Bar Summary(*Yet to make it generic below is example)</h2>
+        <div id="Bar">  </div>
+        <script>
+            //var title = ['BIS Uni', 'Nexis', 'Iris'];
+            var title, passData, failData, pendingData;
+            
+            var details = GetTextFixtures();
+            var i = 0;
+         
+            
+            var trace1 = {
+                x: title,
+                y: passData,
+                name: 'Pass',
+                marker: { color: 'rgb(25, 181, 69)' },
+                type: 'bar'
+            };
+
+            var trace2 = {
+                x: title,
+                y: failData,
+                name: 'Fail',
+                marker: { color: 'rgb(229, 25, 25)' },
+                type: 'bar'
+            };
+
+            var trace3 = {
+                x: title,
+                y: pendingData,
+                name: 'Pending',
+                marker: { color: 'rgb(252, 198, 5)' },
+                type: 'bar'
+            };
+            var data = [trace1, trace2, trace3];
+
+            var layout = { barmode: 'stack' };
+
+            //Plotly.newPlot('Bar', data, layout);
+        </script>
+
+    </div>
+
+    <div id="Summary" class="tabcontent">
+        <h2>Feature Summary</h2>
+          <table class="testEvents">
+                <tr>
+            <th>Feature</th>
+        <th colspan="2">Success rate</th>
+        <th>Tests</th>
+        <th>Succeeded</th>
+        <th>Failed</th>
+        <th>Pending</th>
+        <th>Ignored</th>
+        <th>Skipped</th>
+    </tr>
+
+    <tr>
+            <td><a href="#f-304469113" onclick="openTab(event, 'ScenSummary')">CalculatorFeature (target: IE)</a></td>
+            <td>
+            0%
+    </td>
+    <td>
+        <table class="timelineview" cellpadding="0" cellspacing="0">
+            <tr>
+                    <td>
+                        <a class="bar colorFailed"
+                           style="width: 199px;"
+                           title="3 failed"
+                             href="#error_summary"
+ />
+                    </td>
+            </tr>
+        </table>
+    </td>
+    <td>3 (test executions: 7)</td>
+    <td>0</td>
+    <td>3</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+
+    </tr>
+    <tr>
+            <td><a href="#f656034336" onclick="openTab(event, 'ScenSummary')">CalculatorFeature (target: Chrome)</a></td>
+            <td>
+            n/a
+    </td>
+    <td>
+        <table class="timelineview" cellpadding="0" cellspacing="0">
+            <tr>
+                    <td>
+                        <a class="bar colorSkipped"
+                           style="width: 199px;"
+                           title="3 skipped"
+                            />
+                    </td>
+            </tr>
+        </table>
+    </td>
+    <td>3</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+    <td>3</td>
+
+    </tr>
+    <tr>
+            <td><a href="#f1055549040" onclick="openTab(event, 'ScenSummary')">CalculatorFeature (target: Firefox)</a></td>
+            <td>
+            n/a
+    </td>
+    <td>
+        <table class="timelineview" cellpadding="0" cellspacing="0">
+            <tr>
+                    <td>
+                        <a class="bar colorSkipped"
+                           style="width: 199px;"
+                           title="1 skipped"
+                            />
+                    </td>
+            </tr>
+        </table>
+    </td>
+    <td>1</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+    <td>1</td>
+
+    </tr>
+        </table>
+    </div>
+
+    <div id="ErrDetails" class="tabcontent">
+        <h2>Error Summary</h2>
+        <table class="testEvents">
+            <tr>
+                <th>Tests</th>
+                <th>Show/Hide</th>
+            </tr>
+                <tr>
+                    <td>
+                        <a href="#t-1796064677.0" onclick="openTab(event, 'ScenSummary')">Basepage is Calculator (in TestApplication.UiTests, CalculatorFeature)</a>
+                    </td>
+                    <td>
+                        <button class="btn btn-mini" onclick="toggle1('errt-1796064677.0', event)">show</button>
+                    </td>
+
+                </tr>
+                <tr id="errt-1796064677.0" class="hide">
+                    <td class="left subRow" colspan="3">
+                        <div class="failurePanel">
+                            <b />
+<pre class=" language-bash">
+<code class="language-bash">
+                      Error:  is not a supported browser
+                    </code></pre>
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <a href="#t-671785147.0" onclick="openTab(event, 'ScenSummary')">Add Two Numbers, 50 (in TestApplication.UiTests, CalculatorFeature)</a>
+                    </td>
+                    <td>
+                        <button class="btn btn-mini" onclick="toggle1('errt-671785147.0', event)">show</button>
+                    </td>
+
+                </tr>
+                <tr id="errt-671785147.0" class="hide">
+                    <td class="left subRow" colspan="3">
+                        <div class="failurePanel">
+                            <b />
+<pre class=" language-bash">
+<code class="language-bash">
+                      Error:  is not a supported browser
+                    </code></pre>
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <a href="#t459828864.0" onclick="openTab(event, 'ScenSummary')">Add Two Numbers, 1 (in TestApplication.UiTests, CalculatorFeature)</a>
+                    </td>
+                    <td>
+                        <button class="btn btn-mini" onclick="toggle1('errt459828864.0', event)">show</button>
+                    </td>
+
+                </tr>
+                <tr id="errt459828864.0" class="hide">
+                    <td class="left subRow" colspan="3">
+                        <div class="failurePanel">
+                            <b />
+<pre class=" language-bash">
+<code class="language-bash">
+                      Error:  is not a supported browser
+                    </code></pre>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+
+            </div>
+  
+    <div id="ScenSummary" class="tabcontent">
+                <h2>Scenario Summary</h2>
+                    <a id="f-304469113" />
+                    <h3>Feature: CalculatorFeature (target: IE)</h3>
+                        <div class="description">
+                            <pre>	 In order to avoid silly mistakes 
+	As a math idiot
+	I want to be told the sum of two numbers</pre>
+                        </div>
+                    <table class="testEvents">
+                            <tr>
+            <th>Test</th>
+        <th colspan="2">Success rate</th>
+        <th>Tests</th>
+        <th>Succeeded</th>
+        <th>Failed</th>
+        <th>Pending</th>
+        <th>Ignored</th>
+        <th>Skipped</th>
+    </tr>
+
+                            <tr>
+                                <td>
+                                            <a href="#t-1796064677.0" onclick="openTab(event, 'ScenDetails')">Scenario: Basepage is Calculator</a>
+            <a href="#t-1796064677.1" onclick="openTab(event, 'ScenDetails')">retry #1</a>
+            <a href="#t-1796064677.2" onclick="openTab(event, 'ScenDetails')">retry #2</a>
+
+                                </td>
+                                    <td>
+            0%
+    </td>
+    <td>
+        <table class="timelineview" cellpadding="0" cellspacing="0">
+            <tr>
+                    <td>
+                        <a class="bar colorFailed"
+                           style="width: 199px;"
+                           title="1 failed"
+                             href="#error_summary"
+ />
+                    </td>
+            </tr>
+        </table>
+    </td>
+    <td>1 (test executions: 3)</td>
+    <td>0</td>
+    <td>1</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+
+                            </tr>
+                            <tr>
+                                <td>
+                                            <a href="#t-671785147.0" onclick="openTab(event, 'ScenDetails')">Scenario: Add Two Numbers, 50</a>
+            <a href="#t-671785147.1" onclick="openTab(event, 'ScenDetails')">retry #1</a>
+            <a href="#t-671785147.2" onclick="openTab(event, 'ScenDetails')">retry #2</a>
+
+                                </td>
+                                    <td>
+            0%
+    </td>
+    <td>
+        <table class="timelineview" cellpadding="0" cellspacing="0">
+            <tr>
+                    <td>
+                        <a class="bar colorFailed"
+                           style="width: 199px;"
+                           title="1 failed"
+                             href="#error_summary"
+ />
+                    </td>
+            </tr>
+        </table>
+    </td>
+    <td>1 (test executions: 3)</td>
+    <td>0</td>
+    <td>1</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+
+                            </tr>
+                            <tr>
+                                <td>
+                                            <a href="#t459828864.0" onclick="openTab(event, 'ScenDetails')">Scenario: Add Two Numbers, 1</a>
+
+                                </td>
+                                    <td>
+            0%
+    </td>
+    <td>
+        <table class="timelineview" cellpadding="0" cellspacing="0">
+            <tr>
+                    <td>
+                        <a class="bar colorFailed"
+                           style="width: 199px;"
+                           title="1 failed"
+                             href="#error_summary"
+ />
+                    </td>
+            </tr>
+        </table>
+    </td>
+    <td>1</td>
+    <td>0</td>
+    <td>1</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+
+                            </tr>
+                    </table>
+                    <a id="f656034336" />
+                    <h3>Feature: CalculatorFeature (target: Chrome)</h3>
+                        <div class="description">
+                            <pre>	 In order to avoid silly mistakes 
+	As a math idiot
+	I want to be told the sum of two numbers</pre>
+                        </div>
+                    <table class="testEvents">
+                            <tr>
+            <th>Test</th>
+        <th colspan="2">Success rate</th>
+        <th>Tests</th>
+        <th>Succeeded</th>
+        <th>Failed</th>
+        <th>Pending</th>
+        <th>Ignored</th>
+        <th>Skipped</th>
+    </tr>
+
+                            <tr>
+                                <td>
+                                            <a href="#t1580358652.0" onclick="openTab(event, 'ScenDetails')">Scenario: Basepage is Calculator</a>
+
+                                </td>
+                                    <td>
+            n/a
+    </td>
+    <td>
+        <table class="timelineview" cellpadding="0" cellspacing="0">
+            <tr>
+                    <td>
+                        <a class="bar colorSkipped"
+                           style="width: 199px;"
+                           title="1 skipped"
+                            />
+                    </td>
+            </tr>
+        </table>
+    </td>
+    <td>1</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+    <td>1</td>
+
+                            </tr>
+                            <tr>
+                                <td>
+                                            <a href="#t490028770.0" onclick="openTab(event, 'ScenDetails')">Scenario: Add Two Numbers, 50</a>
+
+                                </td>
+                                    <td>
+            n/a
+    </td>
+    <td>
+        <table class="timelineview" cellpadding="0" cellspacing="0">
+            <tr>
+                    <td>
+                        <a class="bar colorSkipped"
+                           style="width: 199px;"
+                           title="1 skipped"
+                            />
+                    </td>
+            </tr>
+        </table>
+    </td>
+    <td>1</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+    <td>1</td>
+
+                            </tr>
+                            <tr>
+                                <td>
+                                            <a href="#t-777515225.0" onclick="openTab(event, 'ScenDetails')">Scenario: Add Two Numbers, 1</a>
+
+                                </td>
+                                    <td>
+            n/a
+    </td>
+    <td>
+        <table class="timelineview" cellpadding="0" cellspacing="0">
+            <tr>
+                    <td>
+                        <a class="bar colorSkipped"
+                           style="width: 199px;"
+                           title="1 skipped"
+                            />
+                    </td>
+            </tr>
+        </table>
+    </td>
+    <td>1</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+    <td>1</td>
+
+                            </tr>
+                    </table>
+                    <a id="f1055549040" />
+                    <h3>Feature: CalculatorFeature (target: Firefox)</h3>
+                        <div class="description">
+                            <pre>	 In order to avoid silly mistakes 
+	As a math idiot
+	I want to be told the sum of two numbers</pre>
+                        </div>
+                    <table class="testEvents">
+                            <tr>
+            <th>Test</th>
+        <th colspan="2">Success rate</th>
+        <th>Tests</th>
+        <th>Succeeded</th>
+        <th>Failed</th>
+        <th>Pending</th>
+        <th>Ignored</th>
+        <th>Skipped</th>
+    </tr>
+
+                            <tr>
+                                <td>
+                                            <a href="#t1203926956.0" onclick="openTab(event, 'ScenDetails')">Scenario: Basepage is Calculator</a>
+
+                                </td>
+                                    <td>
+            n/a
+    </td>
+    <td>
+        <table class="timelineview" cellpadding="0" cellspacing="0">
+            <tr>
+                    <td>
+                        <a class="bar colorSkipped"
+                           style="width: 199px;"
+                           title="1 skipped"
+                            />
+                    </td>
+            </tr>
+        </table>
+    </td>
+    <td>1</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+    <td>0</td>
+    <td>1</td>
+
+                            </tr>
+                    </table>
+            </div>
+
+    <div id="TimeLine" class="tabcontent">
+        <h2>Test Timeline Summary</h2>
+
+        <div id="timelineview" class="viewbox">
+            <div class="scrollable">
+                <table cellpadding="0" cellspacing="0">
+                    <tr>
+                        <th class="thread-label" colspan="2">thread</th>
+                    </tr>
+                        <tr class="thread-items-row">
+                            <td class="thread-label" title="Machine: DESKTOP-ILLT4Q1">#0</td>
+                            <td colspan="1">
+                                <table class="timelineview" cellpadding="0" cellspacing="0">
+                                    <tr>
+
+                                            <td>
+        <a class="bar startupBar"
+           style="width: 19px;"
+             title="test thread startup"
+>&nbsp;</a>
+    </td>
+
+    <td>
+        <a class="bar colorFailed"
+           style="width: 52px;"
+             title="Basepage is Calculator (in CalculatorFeature)"
+                            href="#t-1796064677.0"
+>&nbsp;</a>
+    </td>
+    <td>
+        <a class="bar colorFailed"
+           style="width: 3px;"
+             title="Basepage is Calculator (in CalculatorFeature) retry #1"
+                            href="#t-1796064677.1"
+>&nbsp;</a>
+    </td>
+    <td>
+        <a class="bar colorFailed"
+           style="width: 3px;"
+             title="Basepage is Calculator (in CalculatorFeature) retry #2"
+                            href="#t-1796064677.2"
+>&nbsp;</a>
+    </td>
+    <td>
+        <a class="bar colorFailed"
+           style="width: 3px;"
+             title="Add Two Numbers, 50 (in CalculatorFeature)"
+                            href="#t-671785147.0"
+>&nbsp;</a>
+    </td>
+    <td>
+        <a class="bar colorFailed"
+           style="width: 3px;"
+             title="Add Two Numbers, 50 (in CalculatorFeature) retry #1"
+                            href="#t-671785147.1"
+>&nbsp;</a>
+    </td>
+    <td>
+        <a class="bar colorFailed"
+           style="width: 3px;"
+             title="Add Two Numbers, 50 (in CalculatorFeature) retry #2"
+                            href="#t-671785147.2"
+>&nbsp;</a>
+    </td>
+    <td>
+        <a class="bar colorFailed"
+           style="width: 3px;"
+             title="Add Two Numbers, 1 (in CalculatorFeature)"
+                            href="#t459828864.0"
+>&nbsp;</a>
+    </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+                    <tr class="horizontal-scale">
+                        <td>&nbsp;</td>
+                        <td class="scale-10-label">0s</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        <h2>Test Result View</h2>
+        <div id="testview" class="viewbox">
+            <div id="bar-control">
+                <div id="bar-control-sort">
+                    <label>sort by:</label>
+                    <span class="option"><input type="radio" name="barSortOrder" value="exectime" />Time</span>
+                    <span class="option"><input type="radio" name="barSortOrder" value="acttime" />Act Time</span>
+                    <span class="option"><input type="radio" name="barSortOrder" value="order" />Execution</span>
+                    <span class="option"><input type="radio" name="barSortOrder" value="rescode" checked="checked" />Result</span>
+                    <span class="option"><input type="checkbox" name="barSortDesc" id="barSortDesc" checked="checked" />desc</span>
+                </div>
+                <div id="bar-control-heights">
+                    <label>heights:</label>
+                    <span class="option"><input type="radio" checked="checked" name="barHeight" value="exectime" />Time</span>
+                    <span class="option"><input type="radio" name="barHeight" value="acttime" />Act Time</span>
+                    
+                </div>
+            </div>
+            <table class="vertical-scale" cellpadding="0" cellspacing="0">
+                <tr class="scale-max">
+                    <td class="left-padding scale-max-label">&nbsp;</td>
+                    <td colspan="11">&nbsp;</td>
+                    <td class="right-padding">&nbsp;</td>
+                </tr>
+                <tr class="scale-mid">
+                    <td class="left-padding scale-mid-label">&nbsp;</td>
+                    <td colspan="11">&nbsp;</td>
+                    <td class="right-padding">&nbsp;</td>
+                </tr>
+                <tr class="scale-min">
+                    <td class="left-padding scale-min-label">&nbsp;</td>
+                    <td colspan="11">&nbsp;</td>
+                    <td class="right-padding">&nbsp;</td>
+                </tr>
+            </table>
+            <div class="scrollable">
+                <table class="testview-items" cellpadding="0" cellspacing="0">
+                    <tr class="testview-items-row">
+                        <td class="left-padding">&nbsp;</td>
+    <td class="testview-item"
+        data-sr-exectime="0" data-sr-rescode="320" data-sr-order="7" data-sr-acttime="0.0">
+        <a class="bar colorSkipped"
+           style="height: 2px;"
+           title="Basepage is Calculator (in CalculatorFeature)"
+           href="#t1580358652.0">&nbsp;</a>
+    </td>
+    <td class="testview-item"
+        data-sr-exectime="0" data-sr-rescode="320" data-sr-order="8" data-sr-acttime="0.0">
+        <a class="bar colorSkipped"
+           style="height: 2px;"
+           title="Add Two Numbers, 50 (in CalculatorFeature)"
+           href="#t490028770.0">&nbsp;</a>
+    </td>
+    <td class="testview-item"
+        data-sr-exectime="0" data-sr-rescode="320" data-sr-order="9" data-sr-acttime="0.0">
+        <a class="bar colorSkipped"
+           style="height: 2px;"
+           title="Add Two Numbers, 1 (in CalculatorFeature)"
+           href="#t-777515225.0">&nbsp;</a>
+    </td>
+    <td class="testview-item"
+        data-sr-exectime="0" data-sr-rescode="320" data-sr-order="10" data-sr-acttime="0.0">
+        <a class="bar colorSkipped"
+           style="height: 2px;"
+           title="Basepage is Calculator (in CalculatorFeature)"
+           href="#t1203926956.0">&nbsp;</a>
+    </td>
+    <td class="testview-item"
+        data-sr-exectime="0.5491722" data-sr-rescode="440" data-sr-order="0" data-sr-acttime="0.0">
+        <a class="bar colorFailed"
+           style="height: 60px;"
+           title="Basepage is Calculator (in CalculatorFeature)"
+           href="#t-1796064677.0">&nbsp;</a>
+    </td>
+    <td class="testview-item"
+        data-sr-exectime="0.0030007" data-sr-rescode="440" data-sr-order="1" data-sr-acttime="0.0">
+        <a class="bar colorFailed"
+           style="height: 2px;"
+           title="Basepage is Calculator (in CalculatorFeature) retry #1"
+           href="#t-1796064677.1">&nbsp;</a>
+    </td>
+    <td class="testview-item"
+        data-sr-exectime="0.0050049" data-sr-rescode="440" data-sr-order="2" data-sr-acttime="0.0">
+        <a class="bar colorFailed"
+           style="height: 2px;"
+           title="Basepage is Calculator (in CalculatorFeature) retry #2"
+           href="#t-1796064677.2">&nbsp;</a>
+    </td>
+    <td class="testview-item"
+        data-sr-exectime="0.0032762" data-sr-rescode="440" data-sr-order="3" data-sr-acttime="0.0">
+        <a class="bar colorFailed"
+           style="height: 2px;"
+           title="Add Two Numbers, 50 (in CalculatorFeature)"
+           href="#t-671785147.0">&nbsp;</a>
+    </td>
+    <td class="testview-item"
+        data-sr-exectime="0.0027181" data-sr-rescode="440" data-sr-order="4" data-sr-acttime="0.0">
+        <a class="bar colorFailed"
+           style="height: 2px;"
+           title="Add Two Numbers, 50 (in CalculatorFeature) retry #1"
+           href="#t-671785147.1">&nbsp;</a>
+    </td>
+    <td class="testview-item"
+        data-sr-exectime="0.0029996" data-sr-rescode="440" data-sr-order="5" data-sr-acttime="0.0">
+        <a class="bar colorFailed"
+           style="height: 2px;"
+           title="Add Two Numbers, 50 (in CalculatorFeature) retry #2"
+           href="#t-671785147.2">&nbsp;</a>
+    </td>
+    <td class="testview-item"
+        data-sr-exectime="0.0030045" data-sr-rescode="440" data-sr-order="6" data-sr-acttime="0.0">
+        <a class="bar colorFailed"
+           style="height: 2px;"
+           title="Add Two Numbers, 1 (in CalculatorFeature)"
+           href="#t459828864.0">&nbsp;</a>
+    </td>
+                        <td class="right-padding">&nbsp;</td>
+                    </tr>
+                    <tr class="horizontal-scale">
+                        <td class="left-padding">&nbsp;</td>
+                        <td colspan="10">&nbsp;</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="ScenDetails" class="tabcontent">
+         <h2>Execution Details</h2>
+        <a name="t-1796064677.0" />
+            <h3>Scenario: Basepage is Calculator (in TestApplication.UiTests, CalculatorFeature)</h3>
+            <div class="description">
+                tags: Browser_Chrome, Browser_IE, Browser_Firefox
+            </div>
+        <ul>
+            <li>Status: Failed</li>
+            <li>Start time: 6/4/2019 11:13:45 PM</li>
+            <li>Execution time (sec): 0.5491722</li>
+            <li>Thread: #0</li>
+                <li>Error:  is not a supported browser</li>
+        </ul>
+            <table class="testEvents">
+                <tr>
+                    <th>Steps</th>
+                    <th>Trace</th>
+                    <th>Result</th>
+                </tr>
+                    <tr>
+                        <td>
+                            <pre class="log"></pre>
+                        </td>
+                        <td>
+                            <!-- [Initialization: Feature - CalculatorFeature] -->
+                            <pre class="log">-&gt; Using app.config</pre>
+                        </td>
+                        <td>Succeeded in 0.373s</td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <pre class="log">Given I navigated to /</pre>
+                        </td>
+                        <td>
+                            <!-- [TestArrange: Scenario - Basepage is Calculator] -->
+                            <pre class="log">error:  is not a supported browser</pre>
+                                <div class="errorMessage"> is not a supported browser</div>
+                                <pre class="stackTrace">System.NotSupportedException:  is not a supported browser
+   at TestApplication.UiTests.Drivers.WebDriver.get_Current() in C:\Users\theer\Kumar\backup\Kumar\Open source project\SpecFlow.Plus.Examples-master_1\SpecFlow.Plus.Examples-master\SeleniumWebTest\TestApplication.UiTests\Drivers\WebDriver.cs:line 34
+   at TestApplication.UiTests.Support.Screenshots.MakeScreenshotAfterStep() in C:\Users\theer\Kumar\backup\Kumar\Open source project\SpecFlow.Plus.Examples-master_1\SpecFlow.Plus.Examples-master\SeleniumWebTest\TestApplication.UiTests\Support\Screenshots.cs:line 23
+   at lambda_method(Closure , IContextManager )
+   at TechTalk.SpecFlow.Bindings.BindingInvoker.InvokeBinding(IBinding binding, IContextManager contextManager, Object[] arguments, ITestTracer testTracer, TimeSpan&amp; duration)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.InvokeHook(IBindingInvoker invoker, IHookBinding hookBinding, HookType hookType)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.FireEvents(HookType hookType)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.FireScenarioEvents(HookType bindingEvent)
+   at TechTalk.SpecRun.SpecFlowPlugin.Runtime.RunnerTestExecutionEngine.OnStepEnd()
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.ExecuteStep(IContextManager contextManager, StepInstance stepInstance)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.Step(StepDefinitionKeyword stepDefinitionKeyword, String keyword, String text, String multilineTextArg, Table tableArg)
+   at TechTalk.SpecFlow.TestRunner.Given(String text, String multilineTextArg, Table tableArg, String keyword)
+   at TestApplication.UiTests.Features.CalculatorFeatureFeature.BasepageIsCalculator() in C:\Users\theer\Kumar\backup\Kumar\Open source project\SpecFlow.Plus.Examples-master_1\SpecFlow.Plus.Examples-master\SeleniumWebTest\TestApplication.UiTests\Features\CalculatorFeature.feature:line 10
+   at TechTalk.SpecRun.Framework.TaskExecutors.StaticOrInstanceMethodExecutor.ExecuteInternal(ITestThreadExecutionContext testThreadExecutionContext)
+   at TechTalk.SpecRun.Framework.TaskExecutors.StaticOrInstanceMethodExecutor.Execute(ITestThreadExecutionContext testThreadExecutionContext)
+   at TechTalk.SpecRun.Framework.TestAssemblyExecutor.ExecuteTestNodeTask(TestNode testNode, ITaskExecutor task, TraceEventType eventType)</pre>
+                        </td>
+                        <td>Failed in 0.154s</td>
+                    </tr>
+            </table>
+        <a name="t-1796064677.1" />
+            <h3>Scenario: Basepage is Calculator (in TestApplication.UiTests, CalculatorFeature) retry #1</h3>
+            <div class="description">
+                tags: Browser_Chrome, Browser_IE, Browser_Firefox
+            </div>
+        <ul>
+            <li>Status: Failed</li>
+            <li>Start time: 6/4/2019 11:13:45 PM</li>
+            <li>Execution time (sec): 0.0030007</li>
+            <li>Thread: #0</li>
+                <li>Error:  is not a supported browser</li>
+        </ul>
+            <table class="testEvents">
+                <tr>
+                    <th>Steps</th>
+                    <th>Trace</th>
+                    <th>Result</th>
+                </tr>
+                    <tr>
+                        <td>
+                            <pre class="log">Given I navigated to /</pre>
+                        </td>
+                        <td>
+                            <!-- [TestArrange: Scenario - Basepage is Calculator] -->
+                            <pre class="log">error:  is not a supported browser</pre>
+                                <div class="errorMessage"> is not a supported browser</div>
+                                <pre class="stackTrace">System.NotSupportedException:  is not a supported browser
+   at TestApplication.UiTests.Drivers.WebDriver.get_Current() in C:\Users\theer\Kumar\backup\Kumar\Open source project\SpecFlow.Plus.Examples-master_1\SpecFlow.Plus.Examples-master\SeleniumWebTest\TestApplication.UiTests\Drivers\WebDriver.cs:line 34
+   at TestApplication.UiTests.Support.Screenshots.MakeScreenshotAfterStep() in C:\Users\theer\Kumar\backup\Kumar\Open source project\SpecFlow.Plus.Examples-master_1\SpecFlow.Plus.Examples-master\SeleniumWebTest\TestApplication.UiTests\Support\Screenshots.cs:line 23
+   at lambda_method(Closure , IContextManager )
+   at TechTalk.SpecFlow.Bindings.BindingInvoker.InvokeBinding(IBinding binding, IContextManager contextManager, Object[] arguments, ITestTracer testTracer, TimeSpan&amp; duration)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.InvokeHook(IBindingInvoker invoker, IHookBinding hookBinding, HookType hookType)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.FireEvents(HookType hookType)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.FireScenarioEvents(HookType bindingEvent)
+   at TechTalk.SpecRun.SpecFlowPlugin.Runtime.RunnerTestExecutionEngine.OnStepEnd()
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.ExecuteStep(IContextManager contextManager, StepInstance stepInstance)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.Step(StepDefinitionKeyword stepDefinitionKeyword, String keyword, String text, String multilineTextArg, Table tableArg)
+   at TechTalk.SpecFlow.TestRunner.Given(String text, String multilineTextArg, Table tableArg, String keyword)
+   at TestApplication.UiTests.Features.CalculatorFeatureFeature.BasepageIsCalculator() in C:\Users\theer\Kumar\backup\Kumar\Open source project\SpecFlow.Plus.Examples-master_1\SpecFlow.Plus.Examples-master\SeleniumWebTest\TestApplication.UiTests\Features\CalculatorFeature.feature:line 10
+   at TechTalk.SpecRun.Framework.TaskExecutors.StaticOrInstanceMethodExecutor.ExecuteInternal(ITestThreadExecutionContext testThreadExecutionContext)
+   at TechTalk.SpecRun.Framework.TaskExecutors.StaticOrInstanceMethodExecutor.Execute(ITestThreadExecutionContext testThreadExecutionContext)
+   at TechTalk.SpecRun.Framework.TestAssemblyExecutor.ExecuteTestNodeTask(TestNode testNode, ITaskExecutor task, TraceEventType eventType)</pre>
+                        </td>
+                        <td>Failed in 0.002s</td>
+                    </tr>
+            </table>
+        <a name="t-1796064677.2" />
+            <h3>Scenario: Basepage is Calculator (in TestApplication.UiTests, CalculatorFeature) retry #2</h3>
+            <div class="description">
+                tags: Browser_Chrome, Browser_IE, Browser_Firefox
+            </div>
+        <ul>
+            <li>Status: Failed</li>
+            <li>Start time: 6/4/2019 11:13:45 PM</li>
+            <li>Execution time (sec): 0.0050049</li>
+            <li>Thread: #0</li>
+                <li>Error:  is not a supported browser</li>
+        </ul>
+            <table class="testEvents">
+                <tr>
+                    <th>Steps</th>
+                    <th>Trace</th>
+                    <th>Result</th>
+                </tr>
+                    <tr>
+                        <td>
+                            <pre class="log">Given I navigated to /</pre>
+                        </td>
+                        <td>
+                            <!-- [TestArrange: Scenario - Basepage is Calculator] -->
+                            <pre class="log">error:  is not a supported browser</pre>
+                                <div class="errorMessage"> is not a supported browser</div>
+                                <pre class="stackTrace">System.NotSupportedException:  is not a supported browser
+   at TestApplication.UiTests.Drivers.WebDriver.get_Current() in C:\Users\theer\Kumar\backup\Kumar\Open source project\SpecFlow.Plus.Examples-master_1\SpecFlow.Plus.Examples-master\SeleniumWebTest\TestApplication.UiTests\Drivers\WebDriver.cs:line 34
+   at TestApplication.UiTests.Support.Screenshots.MakeScreenshotAfterStep() in C:\Users\theer\Kumar\backup\Kumar\Open source project\SpecFlow.Plus.Examples-master_1\SpecFlow.Plus.Examples-master\SeleniumWebTest\TestApplication.UiTests\Support\Screenshots.cs:line 23
+   at lambda_method(Closure , IContextManager )
+   at TechTalk.SpecFlow.Bindings.BindingInvoker.InvokeBinding(IBinding binding, IContextManager contextManager, Object[] arguments, ITestTracer testTracer, TimeSpan&amp; duration)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.InvokeHook(IBindingInvoker invoker, IHookBinding hookBinding, HookType hookType)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.FireEvents(HookType hookType)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.FireScenarioEvents(HookType bindingEvent)
+   at TechTalk.SpecRun.SpecFlowPlugin.Runtime.RunnerTestExecutionEngine.OnStepEnd()
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.ExecuteStep(IContextManager contextManager, StepInstance stepInstance)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.Step(StepDefinitionKeyword stepDefinitionKeyword, String keyword, String text, String multilineTextArg, Table tableArg)
+   at TechTalk.SpecFlow.TestRunner.Given(String text, String multilineTextArg, Table tableArg, String keyword)
+   at TestApplication.UiTests.Features.CalculatorFeatureFeature.BasepageIsCalculator() in C:\Users\theer\Kumar\backup\Kumar\Open source project\SpecFlow.Plus.Examples-master_1\SpecFlow.Plus.Examples-master\SeleniumWebTest\TestApplication.UiTests\Features\CalculatorFeature.feature:line 10
+   at TechTalk.SpecRun.Framework.TaskExecutors.StaticOrInstanceMethodExecutor.ExecuteInternal(ITestThreadExecutionContext testThreadExecutionContext)
+   at TechTalk.SpecRun.Framework.TaskExecutors.StaticOrInstanceMethodExecutor.Execute(ITestThreadExecutionContext testThreadExecutionContext)
+   at TechTalk.SpecRun.Framework.TestAssemblyExecutor.ExecuteTestNodeTask(TestNode testNode, ITaskExecutor task, TraceEventType eventType)</pre>
+                        </td>
+                        <td>Failed in 0.005s</td>
+                    </tr>
+            </table>
+        <a name="t-671785147.0" />
+            <h3>Scenario: Add Two Numbers, 50 (in TestApplication.UiTests, CalculatorFeature)</h3>
+            <div class="description">
+                tags: Browser_IE, Browser_Chrome
+            </div>
+        <ul>
+            <li>Status: Failed</li>
+            <li>Start time: 6/4/2019 11:13:45 PM</li>
+            <li>Execution time (sec): 0.0032762</li>
+            <li>Thread: #0</li>
+                <li>Error:  is not a supported browser</li>
+        </ul>
+            <table class="testEvents">
+                <tr>
+                    <th>Steps</th>
+                    <th>Trace</th>
+                    <th>Result</th>
+                </tr>
+                    <tr>
+                        <td>
+                            <pre class="log">Given I navigated to /</pre>
+                        </td>
+                        <td>
+                            <!-- [TestArrange: Scenario - Add Two Numbers, 50] -->
+                            <pre class="log">error:  is not a supported browser</pre>
+                                <div class="errorMessage"> is not a supported browser</div>
+                                <pre class="stackTrace">System.NotSupportedException:  is not a supported browser
+   at TestApplication.UiTests.Drivers.WebDriver.get_Current() in C:\Users\theer\Kumar\backup\Kumar\Open source project\SpecFlow.Plus.Examples-master_1\SpecFlow.Plus.Examples-master\SeleniumWebTest\TestApplication.UiTests\Drivers\WebDriver.cs:line 34
+   at TestApplication.UiTests.Support.Screenshots.MakeScreenshotAfterStep() in C:\Users\theer\Kumar\backup\Kumar\Open source project\SpecFlow.Plus.Examples-master_1\SpecFlow.Plus.Examples-master\SeleniumWebTest\TestApplication.UiTests\Support\Screenshots.cs:line 23
+   at lambda_method(Closure , IContextManager )
+   at TechTalk.SpecFlow.Bindings.BindingInvoker.InvokeBinding(IBinding binding, IContextManager contextManager, Object[] arguments, ITestTracer testTracer, TimeSpan&amp; duration)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.InvokeHook(IBindingInvoker invoker, IHookBinding hookBinding, HookType hookType)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.FireEvents(HookType hookType)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.FireScenarioEvents(HookType bindingEvent)
+   at TechTalk.SpecRun.SpecFlowPlugin.Runtime.RunnerTestExecutionEngine.OnStepEnd()
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.ExecuteStep(IContextManager contextManager, StepInstance stepInstance)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.Step(StepDefinitionKeyword stepDefinitionKeyword, String keyword, String text, String multilineTextArg, Table tableArg)
+   at TechTalk.SpecFlow.TestRunner.Given(String text, String multilineTextArg, Table tableArg, String keyword)
+   at TestApplication.UiTests.Features.CalculatorFeatureFeature.AddTwoNumbers(String summandOne, String summandTwo, String result, String[] exampleTags) in C:\Users\theer\Kumar\backup\Kumar\Open source project\SpecFlow.Plus.Examples-master_1\SpecFlow.Plus.Examples-master\SeleniumWebTest\TestApplication.UiTests\Features\CalculatorFeature.feature:line 16
+   at TestApplication.UiTests.Features.CalculatorFeatureFeature.AddTwoNumbers_50()
+   at TechTalk.SpecRun.Framework.TaskExecutors.StaticOrInstanceMethodExecutor.ExecuteInternal(ITestThreadExecutionContext testThreadExecutionContext)
+   at TechTalk.SpecRun.Framework.TaskExecutors.StaticOrInstanceMethodExecutor.Execute(ITestThreadExecutionContext testThreadExecutionContext)
+   at TechTalk.SpecRun.Framework.TestAssemblyExecutor.ExecuteTestNodeTask(TestNode testNode, ITaskExecutor task, TraceEventType eventType)</pre>
+                        </td>
+                        <td>Failed in 0.003s</td>
+                    </tr>
+            </table>
+        <a name="t-671785147.1" />
+            <h3>Scenario: Add Two Numbers, 50 (in TestApplication.UiTests, CalculatorFeature) retry #1</h3>
+            <div class="description">
+                tags: Browser_IE, Browser_Chrome
+            </div>
+        <ul>
+            <li>Status: Failed</li>
+            <li>Start time: 6/4/2019 11:13:45 PM</li>
+            <li>Execution time (sec): 0.0027181</li>
+            <li>Thread: #0</li>
+                <li>Error:  is not a supported browser</li>
+        </ul>
+            <table class="testEvents">
+                <tr>
+                    <th>Steps</th>
+                    <th>Trace</th>
+                    <th>Result</th>
+                </tr>
+                    <tr>
+                        <td>
+                            <pre class="log">Given I navigated to /</pre>
+                        </td>
+                        <td>
+                            <!-- [TestArrange: Scenario - Add Two Numbers, 50] -->
+                            <pre class="log">error:  is not a supported browser</pre>
+                                <div class="errorMessage"> is not a supported browser</div>
+                                <pre class="stackTrace">System.NotSupportedException:  is not a supported browser
+   at TestApplication.UiTests.Drivers.WebDriver.get_Current() in C:\Users\theer\Kumar\backup\Kumar\Open source project\SpecFlow.Plus.Examples-master_1\SpecFlow.Plus.Examples-master\SeleniumWebTest\TestApplication.UiTests\Drivers\WebDriver.cs:line 34
+   at TestApplication.UiTests.Support.Screenshots.MakeScreenshotAfterStep() in C:\Users\theer\Kumar\backup\Kumar\Open source project\SpecFlow.Plus.Examples-master_1\SpecFlow.Plus.Examples-master\SeleniumWebTest\TestApplication.UiTests\Support\Screenshots.cs:line 23
+   at lambda_method(Closure , IContextManager )
+   at TechTalk.SpecFlow.Bindings.BindingInvoker.InvokeBinding(IBinding binding, IContextManager contextManager, Object[] arguments, ITestTracer testTracer, TimeSpan&amp; duration)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.InvokeHook(IBindingInvoker invoker, IHookBinding hookBinding, HookType hookType)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.FireEvents(HookType hookType)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.FireScenarioEvents(HookType bindingEvent)
+   at TechTalk.SpecRun.SpecFlowPlugin.Runtime.RunnerTestExecutionEngine.OnStepEnd()
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.ExecuteStep(IContextManager contextManager, StepInstance stepInstance)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.Step(StepDefinitionKeyword stepDefinitionKeyword, String keyword, String text, String multilineTextArg, Table tableArg)
+   at TechTalk.SpecFlow.TestRunner.Given(String text, String multilineTextArg, Table tableArg, String keyword)
+   at TestApplication.UiTests.Features.CalculatorFeatureFeature.AddTwoNumbers(String summandOne, String summandTwo, String result, String[] exampleTags) in C:\Users\theer\Kumar\backup\Kumar\Open source project\SpecFlow.Plus.Examples-master_1\SpecFlow.Plus.Examples-master\SeleniumWebTest\TestApplication.UiTests\Features\CalculatorFeature.feature:line 16
+   at TestApplication.UiTests.Features.CalculatorFeatureFeature.AddTwoNumbers_50()
+   at TechTalk.SpecRun.Framework.TaskExecutors.StaticOrInstanceMethodExecutor.ExecuteInternal(ITestThreadExecutionContext testThreadExecutionContext)
+   at TechTalk.SpecRun.Framework.TaskExecutors.StaticOrInstanceMethodExecutor.Execute(ITestThreadExecutionContext testThreadExecutionContext)
+   at TechTalk.SpecRun.Framework.TestAssemblyExecutor.ExecuteTestNodeTask(TestNode testNode, ITaskExecutor task, TraceEventType eventType)</pre>
+                        </td>
+                        <td>Failed in 0.003s</td>
+                    </tr>
+            </table>
+        <a name="t-671785147.2" />
+            <h3>Scenario: Add Two Numbers, 50 (in TestApplication.UiTests, CalculatorFeature) retry #2</h3>
+            <div class="description">
+                tags: Browser_IE, Browser_Chrome
+            </div>
+        <ul>
+            <li>Status: Failed</li>
+            <li>Start time: 6/4/2019 11:13:45 PM</li>
+            <li>Execution time (sec): 0.0029996</li>
+            <li>Thread: #0</li>
+                <li>Error:  is not a supported browser</li>
+        </ul>
+            <table class="testEvents">
+                <tr>
+                    <th>Steps</th>
+                    <th>Trace</th>
+                    <th>Result</th>
+                </tr>
+                    <tr>
+                        <td>
+                            <pre class="log">Given I navigated to /</pre>
+                        </td>
+                        <td>
+                            <!-- [TestArrange: Scenario - Add Two Numbers, 50] -->
+                            <pre class="log">error:  is not a supported browser</pre>
+                                <div class="errorMessage"> is not a supported browser</div>
+                                <pre class="stackTrace">System.NotSupportedException:  is not a supported browser
+   at TestApplication.UiTests.Drivers.WebDriver.get_Current() in C:\Users\theer\Kumar\backup\Kumar\Open source project\SpecFlow.Plus.Examples-master_1\SpecFlow.Plus.Examples-master\SeleniumWebTest\TestApplication.UiTests\Drivers\WebDriver.cs:line 34
+   at TestApplication.UiTests.Support.Screenshots.MakeScreenshotAfterStep() in C:\Users\theer\Kumar\backup\Kumar\Open source project\SpecFlow.Plus.Examples-master_1\SpecFlow.Plus.Examples-master\SeleniumWebTest\TestApplication.UiTests\Support\Screenshots.cs:line 23
+   at lambda_method(Closure , IContextManager )
+   at TechTalk.SpecFlow.Bindings.BindingInvoker.InvokeBinding(IBinding binding, IContextManager contextManager, Object[] arguments, ITestTracer testTracer, TimeSpan&amp; duration)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.InvokeHook(IBindingInvoker invoker, IHookBinding hookBinding, HookType hookType)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.FireEvents(HookType hookType)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.FireScenarioEvents(HookType bindingEvent)
+   at TechTalk.SpecRun.SpecFlowPlugin.Runtime.RunnerTestExecutionEngine.OnStepEnd()
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.ExecuteStep(IContextManager contextManager, StepInstance stepInstance)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.Step(StepDefinitionKeyword stepDefinitionKeyword, String keyword, String text, String multilineTextArg, Table tableArg)
+   at TechTalk.SpecFlow.TestRunner.Given(String text, String multilineTextArg, Table tableArg, String keyword)
+   at TestApplication.UiTests.Features.CalculatorFeatureFeature.AddTwoNumbers(String summandOne, String summandTwo, String result, String[] exampleTags) in C:\Users\theer\Kumar\backup\Kumar\Open source project\SpecFlow.Plus.Examples-master_1\SpecFlow.Plus.Examples-master\SeleniumWebTest\TestApplication.UiTests\Features\CalculatorFeature.feature:line 16
+   at TestApplication.UiTests.Features.CalculatorFeatureFeature.AddTwoNumbers_50()
+   at TechTalk.SpecRun.Framework.TaskExecutors.StaticOrInstanceMethodExecutor.ExecuteInternal(ITestThreadExecutionContext testThreadExecutionContext)
+   at TechTalk.SpecRun.Framework.TaskExecutors.StaticOrInstanceMethodExecutor.Execute(ITestThreadExecutionContext testThreadExecutionContext)
+   at TechTalk.SpecRun.Framework.TestAssemblyExecutor.ExecuteTestNodeTask(TestNode testNode, ITaskExecutor task, TraceEventType eventType)</pre>
+                        </td>
+                        <td>Failed in 0.002s</td>
+                    </tr>
+            </table>
+        <a name="t459828864.0" />
+            <h3>Scenario: Add Two Numbers, 1 (in TestApplication.UiTests, CalculatorFeature)</h3>
+            <div class="description">
+                tags: Browser_IE, Browser_Chrome
+            </div>
+        <ul>
+            <li>Status: Failed</li>
+            <li>Start time: 6/4/2019 11:13:45 PM</li>
+            <li>Execution time (sec): 0.0030045</li>
+            <li>Thread: #0</li>
+                <li>Error:  is not a supported browser</li>
+        </ul>
+            <table class="testEvents">
+                <tr>
+                    <th>Steps</th>
+                    <th>Trace</th>
+                    <th>Result</th>
+                </tr>
+                    <tr>
+                        <td>
+                            <pre class="log">Given I navigated to /</pre>
+                        </td>
+                        <td>
+                            <!-- [TestArrange: Scenario - Add Two Numbers, 1] -->
+                            <pre class="log">error:  is not a supported browser</pre>
+                                <div class="errorMessage"> is not a supported browser</div>
+                                <pre class="stackTrace">System.NotSupportedException:  is not a supported browser
+   at TestApplication.UiTests.Drivers.WebDriver.get_Current() in C:\Users\theer\Kumar\backup\Kumar\Open source project\SpecFlow.Plus.Examples-master_1\SpecFlow.Plus.Examples-master\SeleniumWebTest\TestApplication.UiTests\Drivers\WebDriver.cs:line 34
+   at TestApplication.UiTests.Support.Screenshots.MakeScreenshotAfterStep() in C:\Users\theer\Kumar\backup\Kumar\Open source project\SpecFlow.Plus.Examples-master_1\SpecFlow.Plus.Examples-master\SeleniumWebTest\TestApplication.UiTests\Support\Screenshots.cs:line 23
+   at lambda_method(Closure , IContextManager )
+   at TechTalk.SpecFlow.Bindings.BindingInvoker.InvokeBinding(IBinding binding, IContextManager contextManager, Object[] arguments, ITestTracer testTracer, TimeSpan&amp; duration)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.InvokeHook(IBindingInvoker invoker, IHookBinding hookBinding, HookType hookType)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.FireEvents(HookType hookType)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.FireScenarioEvents(HookType bindingEvent)
+   at TechTalk.SpecRun.SpecFlowPlugin.Runtime.RunnerTestExecutionEngine.OnStepEnd()
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.ExecuteStep(IContextManager contextManager, StepInstance stepInstance)
+   at TechTalk.SpecFlow.Infrastructure.TestExecutionEngine.Step(StepDefinitionKeyword stepDefinitionKeyword, String keyword, String text, String multilineTextArg, Table tableArg)
+   at TechTalk.SpecFlow.TestRunner.Given(String text, String multilineTextArg, Table tableArg, String keyword)
+   at TestApplication.UiTests.Features.CalculatorFeatureFeature.AddTwoNumbers(String summandOne, String summandTwo, String result, String[] exampleTags) in C:\Users\theer\Kumar\backup\Kumar\Open source project\SpecFlow.Plus.Examples-master_1\SpecFlow.Plus.Examples-master\SeleniumWebTest\TestApplication.UiTests\Features\CalculatorFeature.feature:line 16
+   at TestApplication.UiTests.Features.CalculatorFeatureFeature.AddTwoNumbers_1()
+   at TechTalk.SpecRun.Framework.TaskExecutors.StaticOrInstanceMethodExecutor.ExecuteInternal(ITestThreadExecutionContext testThreadExecutionContext)
+   at TechTalk.SpecRun.Framework.TaskExecutors.StaticOrInstanceMethodExecutor.Execute(ITestThreadExecutionContext testThreadExecutionContext)
+   at TechTalk.SpecRun.Framework.TestAssemblyExecutor.ExecuteTestNodeTask(TestNode testNode, ITaskExecutor task, TraceEventType eventType)</pre>
+                        </td>
+                        <td>Failed in 0.002s</td>
+                    </tr>
+            </table>
+        <a name="t1580358652.0" />
+            <h3>Scenario: Basepage is Calculator (in TestApplication.UiTests, CalculatorFeature)</h3>
+            <div class="description">
+                tags: Browser_Chrome, Browser_IE, Browser_Firefox
+            </div>
+        <ul>
+            <li>Status: Skipped</li>
+            <li>Start time: 6/4/2019 11:13:45 PM</li>
+            <li>Execution time (sec): 0</li>
+            <li>Thread: #-1</li>
+        </ul>
+            <table class="testEvents">
+                <tr>
+                    <th>Steps</th>
+                    <th>Trace</th>
+                    <th>Result</th>
+                </tr>
+            </table>
+        <a name="t490028770.0" />
+            <h3>Scenario: Add Two Numbers, 50 (in TestApplication.UiTests, CalculatorFeature)</h3>
+            <div class="description">
+                tags: Browser_IE, Browser_Chrome
+            </div>
+        <ul>
+            <li>Status: Skipped</li>
+            <li>Start time: 6/4/2019 11:13:45 PM</li>
+            <li>Execution time (sec): 0</li>
+            <li>Thread: #-1</li>
+        </ul>
+            <table class="testEvents">
+                <tr>
+                    <th>Steps</th>
+                    <th>Trace</th>
+                    <th>Result</th>
+                </tr>
+            </table>
+        <a name="t-777515225.0" />
+            <h3>Scenario: Add Two Numbers, 1 (in TestApplication.UiTests, CalculatorFeature)</h3>
+            <div class="description">
+                tags: Browser_IE, Browser_Chrome
+            </div>
+        <ul>
+            <li>Status: Skipped</li>
+            <li>Start time: 6/4/2019 11:13:45 PM</li>
+            <li>Execution time (sec): 0</li>
+            <li>Thread: #-1</li>
+        </ul>
+            <table class="testEvents">
+                <tr>
+                    <th>Steps</th>
+                    <th>Trace</th>
+                    <th>Result</th>
+                </tr>
+            </table>
+        <a name="t1203926956.0" />
+            <h3>Scenario: Basepage is Calculator (in TestApplication.UiTests, CalculatorFeature)</h3>
+            <div class="description">
+                tags: Browser_Chrome, Browser_IE, Browser_Firefox
+            </div>
+        <ul>
+            <li>Status: Skipped</li>
+            <li>Start time: 6/4/2019 11:13:45 PM</li>
+            <li>Execution time (sec): 0</li>
+            <li>Thread: #-1</li>
+        </ul>
+            <table class="testEvents">
+                <tr>
+                    <th>Steps</th>
+                    <th>Trace</th>
+                    <th>Result</th>
+                </tr>
+            </table>
+    </div>
+
+    <script>
+                function openTab(evt, tabName) {
+                    var i, tabcontent, tablinks;
+                    tabcontent = document.getElementsByClassName("tabcontent");
+                    for (i = 0; i < tabcontent.length; i++) {
+                        tabcontent[i].style.display = "none";
+                    }
+                    tablinks = document.getElementsByClassName("tablinks");
+                    for (i = 0; i < tablinks.length; i++) {
+                        tablinks[i].className = tablinks[i].className.replace(" active", "");
+                    }
+                    document.getElementById(tabName).style.display = "block";
+                    evt.currentTarget.className += " active";
+                }
+
+                // Get the element with id="defaultOpen" and click on it
+                document.getElementById("defaultOpen").click();
+            </script>
+
+        </body>
+</html>
+</a><div style='position: absolute; top:0px; right:10px; z-index: 1000; text-align: right; font-size: small; color: #FF5555'>
+Generated by an evaluation version of SpecRun.<br />
+This version can be used for evaluation purposes only.<br />
+For obtaining a registered license please visit <a href='http://www.specflow.org/plus'>http://www.specflow.org/plus</a>.
+</div>
